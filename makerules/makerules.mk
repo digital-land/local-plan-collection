@@ -1,5 +1,3 @@
-SOURCE_URL=https://raw.githubusercontent.com/digital-land/
-
 # deduce the repository
 ifeq ($(REPOSITORY),)
 REPOSITORY=$(shell basename -s .git `git config --get remote.origin.url`)
@@ -8,22 +6,52 @@ endif
 ifeq ($(ENVIRONMENT),)
 ENVIRONMENT=production
 endif
+
+ifeq ($(SOURCE_URL),)
+SOURCE_URL=https://raw.githubusercontent.com/digital-land/
+endif
+
+ifeq ($(MAKERULES_URL),)
+MAKERULES_URL=$(SOURCE_URL)makerules/main/
+endif
+
+ifeq ($(CONFIG_URL),)
+CONFIG_URL=https://raw.githubusercontent.com/digital-land/config/main/
+endif
+
+ifeq ($(COLLECTION_NAME),)
+COLLECTION_NAME=$(shell echo "$(REPOSITORY)"|sed 's/-collection$$//')
+endif
+
 ifeq ($(COLLECTION_DATASET_BUCKET_NAME),)
 COLLECTION_DATASET_BUCKET_NAME=digital-land-$(ENVIRONMENT)-collection-dataset
 endif
+
 ifeq ($(HOISTED_COLLECTION_DATASET_BUCKET_NAME),)
 HOISTED_COLLECTION_DATASET_BUCKET_NAME=digital-land-$(ENVIRONMENT)-collection-dataset-hoisted
 endif
+
 define dataset_url
 'https://$(COLLECTION_DATASET_BUCKET_NAME).s3.eu-west-2.amazonaws.com/$(2)-collection/dataset/$(1).sqlite3'
 endef
 
+ifeq ($(VAR_DIR),)
+VAR_DIR=var/
+endif
+
+ifeq ($(CACHE_DIR),)
+CACHE_DIR=$(VAR_DIR)cache/
+endif
+
+
 .PHONY: \
 	makerules\
 	specification\
+	config\
 	init\
 	first-pass\
 	second-pass\
+	third-pass\
 	clobber\
 	clean\
 	commit-makerules\
@@ -57,13 +85,16 @@ SPATIALITE_EXTENSION="/usr/local/lib/mod_spatialite.dylib"
 endif
 endif
 
-all:: first-pass second-pass
+all:: first-pass second-pass third-pass
 
 first-pass::
 	@:
 
 # restart the make process to pick-up collected files
 second-pass::
+	@:
+
+third-pass::
 	@:
 
 # initialise
@@ -90,11 +121,11 @@ clean::
 
 # prune back to source code
 prune::
-	rm -rf ./var $(VALIDATION_DIR)
+	rm -rf ./$(VAR_DIR) $(VALIDATION_DIR)
 
 # update makerules from source
 makerules::
-	curl -qfsL '$(SOURCE_URL)/makerules/main/makerules.mk' > makerules/makerules.mk
+	curl -qfsL '$(MAKERULES_URL)makerules.mk' > makerules/makerules.mk
 
 ifeq (,$(wildcard ./makerules/specification.mk))
 # update local copies of specification files
@@ -116,8 +147,18 @@ specification::
 	curl -qfsL '$(SOURCE_URL)/specification/main/specification/schema.csv' > specification/schema.csv
 	curl -qfsL '$(SOURCE_URL)/specification/main/specification/schema-field.csv' > specification/schema-field.csv
 
+
 init::	specification
 endif
+
+# local copy of organsiation datapackage
+$(CACHE_DIR)organisation.csv:
+	@mkdir -p $(CACHE_DIR)
+	curl -qfs "https://files.planning.data.gov.uk/organisation-collection/dataset/organisation.csv" > $(CACHE_DIR)organisation.csv
+
+init:: config
+
+config::;
 
 commit-makerules::
 	git add makerules
